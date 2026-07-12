@@ -1,0 +1,12 @@
+{
+  "task": "date-normalization (synthetic, controlled)",
+  "train_size": 10800,
+  "test_size": 1200,
+  "epochs": 15,
+  "embed_dim": 48,
+  "hidden_dim": 96,
+  "seed": 0,
+  "test_exact_match_accuracy": 1.0,
+  "test_bleu_character": 1.0,
+  "final_train_loss": 0.0002
+}
