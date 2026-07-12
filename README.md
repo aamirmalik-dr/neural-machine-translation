@@ -1,65 +1,65 @@
 # Neural machine translation with attention
 
-A sequence-to-sequence model with Bahdanau (additive) attention, implemented from
-scratch in PyTorch: a bidirectional GRU encoder, an additive attention module, a
-GRU decoder with teacher forcing, greedy decoding, a corpus BLEU metric, and
-attention-alignment extraction.
+A from-scratch tutorial implementation of a sequence-to-sequence translator with
+Bahdanau (additive) attention, in PyTorch. The point of this repository is to
+show, component by component and with the math alongside the code, how attention
+lets a decoder align its output with the source. It is demonstrated on a
+controlled task where that alignment is directly visible: normalizing
+human-written dates into ISO 8601.
 
-It is demonstrated on a controlled translation task, converting human-written
-dates in many formats into ISO 8601 (`YYYY-MM-DD`). This task is a real
-sequence-to-sequence alignment problem (the model must copy digits, map month
-names to numbers, and reorder fields), it trains to completion on a CPU, and its
-attention maps are directly interpretable. The same architecture applies
-unchanged to a natural-language parallel corpus such as Multi30k.
+The narrated walkthrough in `notebooks/demo.ipynb` is the primary entry point.
+The sections below mirror it.
 
-## What it does
+## Why attention
 
-- Generates parallel (human date, ISO date) pairs deterministically, with six
-  input formats and character-level vocabularies (`data.py`).
-- Encodes the source with a bidirectional GRU, attends over the encoder outputs
-  with additive attention (masked over padding), and decodes with a GRU
-  (`model.py`).
-- Trains with teacher forcing and evaluates with exact-match accuracy and a
-  character-level corpus BLEU (`train.py`, `metrics.py`).
-- Extracts and plots the attention alignment for any example (`scripts/train.py`).
+A plain sequence-to-sequence model encodes the whole source into one fixed-length
+vector and asks the decoder to produce every output token from that single
+summary. The summary is a bottleneck. Attention removes it: the encoder keeps one
+hidden state per source position, and at every output step the decoder builds a
+fresh, weighted summary that focuses on the source positions that matter right
+now.
 
-## What it does not do
+Concretely, the model has three parts.
 
-- The headline demo is a controlled date task, chosen so the full attention
-  pipeline is verifiable end to end on a CPU. It is not trained on a natural
-  language corpus here, though the code is corpus-agnostic (see
-  `scripts/download_data.py`).
-- Decoding is greedy, not beam search.
-- Tokenization is character level, not subword.
+**Encoder.** A bidirectional GRU reads the source characters and returns one
+state per position, `h_1, ..., h_S`, each of dimension `2H` (forward and backward
+concatenated). Nothing is compressed away; every position is kept.
 
-## Install
+**Bahdanau attention.** At a decoding step with state `s`, a small feed-forward
+network scores each source position,
 
-```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install -e ".[dev]"
+```
+e_j = v^T tanh(W_enc h_j + W_dec s)
 ```
 
-## Run
+padded positions are masked to negative infinity, a softmax turns the scores into
+weights that sum to one, and the context vector is the weighted average of the
+encoder states,
 
-```bash
-python scripts/train.py --n 12000 --epochs 15
+```
+alpha = softmax(e),    c = sum_j alpha_j h_j
 ```
 
-`notebooks/demo.ipynb` is a short executed walkthrough with an attention heatmap.
+The weights `alpha` are the alignment. Plotted as a heatmap they show, for each
+output character, which source characters the decoder leaned on.
 
-## Results
+**Decoder.** A GRU cell consumes the previous output embedding together with the
+context vector, updates its state, and projects the state-and-context pair to
+logits over the target vocabulary. Training uses teacher forcing; inference uses
+greedy autoregressive decoding through the identical step function.
 
-Trained on 12000 generated date pairs (1200 held out), 15 epochs, single CPU,
-seed 0. Produced by `scripts/train.py` in this repository.
+The full derivation, with masking and the interpretability argument, is in
+[`docs/attention.md`](docs/attention.md). The equations there map one to one onto
+`src/nmt/model.py`.
 
-| Metric                    | Value |
-|---------------------------|------:|
-| Test exact-match accuracy | 1.0000 |
-| Test BLEU (character)     | 1.0000 |
+## The controlled task
 
-The model translates every held-out date correctly across all six input formats.
-A sample of its output:
+The source is dates written the way people write them, across six formats. The
+target is the canonical `YYYY-MM-DD`. This is a real alignment problem: the model
+must copy the year digits, map a month name to two digits, copy the day, and
+reorder the three fields. It is fully synthetic, generated deterministically by
+`nmt.data.make_date_dataset`, so there is no download and the run reproduces
+exactly.
 
 ```
 Jul 2, 1990          -> 1990-07-02
@@ -68,20 +68,92 @@ Jul 2, 1990          -> 1990-07-02
 February 22, 2006    -> 2006-02-22
 ```
 
-The learned attention aligns each output digit with the corresponding characters
-in the input (the year digits, the month name, the day), which is exactly the
-behavior the additive attention mechanism is meant to produce. The alignment
-heatmap is written to `results/attention.png`.
+## The hero figure: learned alignment
+
+![Attention alignment heatmap](results/attention.png)
+
+Each row is one generated output character, each column one source character, and
+brightness is the attention weight. The year digits attend to the source year,
+the month digits to the month name, and the day digits to the source day. The
+matrix reads almost like a permutation, which is exactly the alignment the
+additive attention mechanism is meant to learn. Regenerate it from the committed
+model with:
+
+```bash
+python scripts/translate.py --heatmap "March 3, 2001"
+```
+
+## Results, and an honest reading of them
+
+Trained on 10800 generated date pairs (1200 held out), 15 epochs, single CPU,
+seed 0, produced by `scripts/train.py` in this session:
+
+| Metric                    | Value  |
+|---------------------------|-------:|
+| Test exact-match accuracy | 1.0000 |
+| Test BLEU (character)     | 1.0000 |
+
+Every held-out date across all six formats is normalized correctly. This is not a
+machine-translation benchmark and should not be read as one. The date task is
+synthetic, finite in structure, and fully learnable on a CPU, so a correctly
+implemented attention model is expected to solve it completely. The value of the
+perfect score is as controlled validation: it confirms the encoder, attention,
+masking, decoder, and greedy decoder are wired correctly, and the heatmap
+confirms the model succeeds by aligning source and target rather than by a
+shortcut. The same architecture applies unchanged to a natural-language parallel
+corpus such as Multi30k, where scores would be far lower and beam search and
+subword tokenization would begin to matter. The numbers above are written to
+`results/metrics.json`.
+
+## Quickstart, no training, no network
+
+A small trained checkpoint is committed at `models/date_translator.pt` (under
+1 MB), so translation and the heatmap render instantly offline.
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -e ".[dev]"
+
+# Normalize dates with the committed model (no training, no download):
+python scripts/translate.py "March 3, 2001" "07.06.1994"
+python examples/translate_examples.py
+```
+
+## Reproduce the training run
+
+```bash
+python scripts/train.py --n 12000 --epochs 15
+```
+
+This regenerates the checkpoint, `results/metrics.json`, the attention heatmap,
+and the loss curve. Open `notebooks/demo.ipynb` for the narrated derivation and
+run it end to end in about two minutes on a CPU.
 
 ## Layout
 
 ```
-src/nmt/        data, model (encoder, attention, decoder, seq2seq), train, metrics
-scripts/        download_data.py (data note), train.py
-notebooks/      demo.ipynb (executed)
-tests/          pytest suite for data, model shapes, attention, metrics, training
-data/           gitignored; see data/README.md
+src/nmt/        data, model (encoder, attention, decoder, seq2seq),
+                train, metrics, checkpoint (save/load), viz (heatmap, translate)
+scripts/        train.py, translate.py (offline), make_sample.py, download_data.py
+notebooks/      demo.ipynb (executed, primary entry point)
+docs/           attention.md (the derivation)
+examples/       translate_examples.py + README, offline
+models/         date_translator.pt (committed pretrained checkpoint)
+data/           sample_dates.csv (synthetic sample) + README; full data gitignored
+results/        attention.png (hero), loss.png, metrics.json
+tests/          pytest suite for data, model shapes, attention, checkpoint,
+                alignment, metrics, training
 ```
+
+## What it does not do
+
+- The headline demo is a controlled date task, chosen so the full attention
+  pipeline is verifiable end to end on a CPU. It is not trained on a natural
+  language corpus here, though the code is corpus-agnostic (see
+  `scripts/download_data.py` and `data/README.md`).
+- Decoding is greedy, not beam search.
+- Tokenization is character level, not subword.
 
 ## Tests
 
