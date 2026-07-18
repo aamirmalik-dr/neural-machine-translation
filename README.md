@@ -1,7 +1,5 @@
 # neural-machine-translation
 
-*Origin: Originally developed for the Programming for AI course at KAIST (Fall 2020); refactored and open-sourced in July 2026.*
-
 A from-scratch tutorial implementation of a sequence-to-sequence translator with
 Bahdanau (additive) attention, in PyTorch. The point of this repository is to
 show, component by component and with the math alongside the code, how attention
@@ -172,3 +170,7 @@ MIT, see [LICENSE](LICENSE).
 
 Aamir Malik. [GitHub](https://github.com/aamirmalik-dr) ·
 [LinkedIn](https://linkedin.com/in/dr-aamirmalik)
+
+---
+
+*Refactored and engineered into this tested, reproducible project in July 2026, from work originally done for the Programming for AI course at KAIST (Fall 2020).*
