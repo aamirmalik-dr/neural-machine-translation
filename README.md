@@ -1,4 +1,4 @@
-# Neural machine translation with attention
+# neural-machine-translation
 
 *Origin: Originally developed for the Programming for AI course at KAIST (Fall 2020); refactored and open-sourced in July 2026.*
 
