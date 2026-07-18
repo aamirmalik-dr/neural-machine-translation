@@ -1,5 +1,7 @@
 # Neural machine translation with attention
 
+*Origin: Originally developed for the Programming for AI course at KAIST (Fall 2020); refactored and open-sourced in July 2026.*
+
 A from-scratch tutorial implementation of a sequence-to-sequence translator with
 Bahdanau (additive) attention, in PyTorch. The point of this repository is to
 show, component by component and with the math alongside the code, how attention
